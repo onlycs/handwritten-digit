@@ -157,13 +157,23 @@ def run_web_app(port: int) -> None:
     """Run the Flask web application."""
     try:
         from flask import Flask, render_template, request, jsonify
+        from flask_limiter import Limiter
+        from flask_limiter.util import get_remote_address
         import base64
         import io
     except ImportError:
-        print("Flask not installed. Install with: pip install flask")
+        print("Flask and/or Flask-Limiter not installed. Install with: pip install flask flask-limiter")
         sys.exit(1)
 
     app = Flask(__name__)
+
+    # Initialize rate limiter
+    limiter = Limiter(
+        app,
+        key_func=get_remote_address,
+        default_limits=["1000 per hour"]
+    )
+
     recognizer = DigitRecognizer()
 
     @app.route('/')
@@ -171,6 +181,7 @@ def run_web_app(port: int) -> None:
         return render_template('index.html')
 
     @app.route('/predict', methods=['POST'])
+    @limiter.limit("30 per minute")
     def predict():
         try:
             data = request.get_json()
