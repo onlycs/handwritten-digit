@@ -169,8 +169,8 @@ def run_web_app(port: int) -> None:
 
     # Initialize rate limiter
     limiter = Limiter(
-        app,
         key_func=get_remote_address,
+        app=app,
         default_limits=["1000 per hour"]
     )
 
