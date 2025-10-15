@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Handwritten Digit Recognizer</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>🔢 Handwritten Digit Recognizer</h1>
+        <p class="subtitle">Draw a digit (0-9) on the canvas below:</p>
+
+        <div class="canvas-container">
+            <canvas id="canvas" width="280" height="280"></canvas>
+        </div>
+
+        <div class="controls">
+            <button class="predict-btn" onclick="predict()">Predict</button>
+            <button class="clear-btn" onclick="clearCanvas()">Clear</button>
+        </div>
+
+        <div class="result-container">
+            <div id="result" class="result">Draw a digit to get started!</div>
+            <div id="confidence" class="confidence"></div>
+        </div>
+
+        <div class="instructions">
+            <h3>How to use:</h3>
+            <ul>
+                <li>Draw a single digit (0-9) on the black canvas above</li>
+                <li>Try to center your digit and make it clear</li>
+                <li>Click "Predict" to see what the AI thinks it is</li>
+                <li>Use "Clear" to start over</li>
+            </ul>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+</body>
+</html>

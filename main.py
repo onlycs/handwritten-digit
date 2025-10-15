@@ -1,13 +1,11 @@
 from typing import Tuple, Optional
-import tkinter as tk
-from tkinter import messagebox
 import numpy as np
 import numpy.typing as npt
 from tensorflow import keras
-from tensorflow.keras import layers
-from PIL import Image, ImageDraw
+from PIL import Image
 import os
-import time
+import sys
+import argparse
 
 
 class DigitRecognizer:
@@ -31,16 +29,16 @@ class DigitRecognizer:
             keras.Model: Compiled CNN model ready for training
         """
         model = keras.Sequential([
-            layers.Reshape((28, 28, 1), input_shape=(28, 28)),
-            layers.Conv2D(32, (3, 3), activation='relu'),
-            layers.MaxPooling2D((2, 2)),
-            layers.Conv2D(64, (3, 3), activation='relu'),
-            layers.MaxPooling2D((2, 2)),
-            layers.Conv2D(64, (3, 3), activation='relu'),
-            layers.Flatten(),
-            layers.Dense(64, activation='relu'),
-            layers.Dropout(0.5),
-            layers.Dense(10, activation='softmax')
+            keras.layers.Reshape((28, 28, 1), input_shape=(28, 28)),
+            keras.layers.Conv2D(32, (3, 3), activation='relu'),
+            keras.layers.MaxPooling2D((2, 2)),
+            keras.layers.Conv2D(64, (3, 3), activation='relu'),
+            keras.layers.MaxPooling2D((2, 2)),
+            keras.layers.Conv2D(64, (3, 3), activation='relu'),
+            keras.layers.Flatten(),
+            keras.layers.Dense(64, activation='relu'),
+            keras.layers.Dropout(0.5),
+            keras.layers.Dense(10, activation='softmax')
         ])
 
         model.compile(optimizer='adam',
@@ -89,7 +87,7 @@ class DigitRecognizer:
         test_loss, test_acc = self.model.evaluate(x_test, y_test, verbose=0)
         print(f"Test accuracy: {test_acc:.4f}")
 
-        self.model.save('digit_model.h5')
+        self.model.save('model.h5')
         print("Model saved!")
 
     def predict_digit(self, image_array: npt.NDArray[np.uint8]) -> Tuple[int, float]:
@@ -117,246 +115,116 @@ class DigitRecognizer:
         return int(predicted_digit), float(confidence)
 
 
-class DrawingApp:
-    def __init__(self, root: tk.Tk) -> None:
-        self.root = root
-        self.root.title("Handwritten Digit Recognizer")
-        self.root.geometry("500x600")
+def center_image(img_array: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
+    """
+    Center the drawn digit within the 28x28 image boundaries.
 
-        self.recognizer = DigitRecognizer()
+    Finds the bounding box of the drawn content, extracts the digit,
+    and repositions it in the center of a new 28x28 image to improve
+    recognition accuracy by matching MNIST preprocessing.
 
-        self.canvas_size: int = 280
-        self.brush_size: int = 15
-        self.drawing: bool = False
-        self.last_prediction_time: float = 0.0
-        self.prediction_delay: float = 0.2  # 200ms delay between predictions
-        self.last_x: Optional[int] = None
-        self.last_y: Optional[int] = None
+    Args:
+        img_array: Input 28x28 image array with the drawn digit
 
-        self.image = Image.new("L", (self.canvas_size, self.canvas_size), 0)
-        self.draw = ImageDraw.Draw(self.image)
-
-        self.canvas: tk.Canvas
-        self.result_label: tk.Label
-        self.confidence_label: tk.Label
-
-        self.setup_ui()
-
-    def setup_ui(self) -> None:
-        """
-        Set up the complete user interface for the digit recognition application.
-
-        Creates and configures all UI elements including:
-        - Title label
-        - Drawing canvas with mouse event bindings
-        - Clear button
-        - Result display labels
-        """
-        title_label = tk.Label(self.root, text="Draw a digit (0-9)",
-                               font=("Arial", 16, "bold"))
-        title_label.pack(pady=10)
-
-        self.canvas = tk.Canvas(self.root, width=self.canvas_size,
-                                height=self.canvas_size, bg='black',
-                                cursor='pencil')
-        self.canvas.pack(pady=10)
-
-        self.canvas.bind("<Button-1>", self.start_draw)
-        self.canvas.bind("<B1-Motion>", self.draw_digit)
-        self.canvas.bind("<ButtonRelease-1>", self.end_draw)
-
-        button_frame = tk.Frame(self.root)
-        button_frame.pack(pady=10)
-
-        clear_btn = tk.Button(button_frame, text="Clear",
-                              command=self.clear_canvas,
-                              font=("Arial", 12), width=10)
-        clear_btn.pack(side=tk.LEFT, padx=5)
-
-        result_frame = tk.Frame(self.root)
-        result_frame.pack(pady=20)
-
-        self.result_label = tk.Label(result_frame, text="Draw a digit to get prediction",
-                                     font=("Arial", 14))
-        self.result_label.pack()
-
-        self.confidence_label = tk.Label(result_frame, text="",
-                                         font=("Arial", 12), fg='gray')
-        self.confidence_label.pack()
-
-    def start_draw(self, event: tk.Event) -> None:
-        """
-        Initialize drawing mode when mouse button is pressed.
-
-        Sets the drawing flag to True and records the initial position,
-        enabling smooth line drawing with interpolation.
-
-        Args:
-            event: Tkinter mouse event object containing coordinates
-        """
-        self.drawing = True
-        self.last_x = event.x
-        self.last_y = event.y
-
-    def draw_digit(self, event: tk.Event) -> None:
-        """
-        Draw on both the display canvas and internal PIL image during mouse motion.
-
-        Creates smooth continuous lines by interpolating between the previous
-        and current mouse positions to eliminate gaps. Also triggers real-time
-        prediction with throttling to avoid performance issues.
-
-        Args:
-            event: Tkinter mouse event object containing current cursor coordinates
-        """
-        if self.drawing and self.last_x is not None and self.last_y is not None:
-            x, y = event.x, event.y
-
-            # Draw line on tkinter canvas for smooth appearance
-            self.canvas.create_line(self.last_x, self.last_y, x, y,
-                                    width=self.brush_size, fill='white',
-                                    capstyle=tk.ROUND, smooth=tk.TRUE)
-
-            # Draw line on PIL image for recognition
-            self.draw.line([self.last_x, self.last_y, x, y],
-                           fill=255, width=self.brush_size)
-
-            # Update last position
-            self.last_x, self.last_y = x, y
-
-            # Real-time prediction with throttling
-            current_time = time.time()
-            if current_time - self.last_prediction_time > self.prediction_delay:
-                self.predict_digit()
-                self.last_prediction_time = current_time
-
-    def end_draw(self, event: tk.Event) -> None:
-        """
-        Finalize drawing when mouse button is released.
-
-        Sets drawing flag to False, resets position tracking, and automatically 
-        triggers prediction after each drawing stroke is completed.
-
-        Args:
-            event: Tkinter mouse event object
-        """
-        self.drawing = False
-        self.last_x = None
-        self.last_y = None
-        self.predict_digit()
-
-    def clear_canvas(self) -> None:
-        """
-        Reset the drawing canvas and internal image to blank state.
-
-        Removes all drawings from the display canvas, creates a new blank
-        PIL image, resets position tracking, and resets the result labels.
-        """
-        self.canvas.delete("all")
-        self.image = Image.new("L", (self.canvas_size, self.canvas_size), 0)
-        self.draw = ImageDraw.Draw(self.image)
-        self.last_x = None
-        self.last_y = None
-        self.result_label.config(text="Draw a digit to get prediction")
-        self.confidence_label.config(text="")
-
-    def preprocess_image(self) -> npt.NDArray[np.uint8]:
-        """
-        Convert the drawn image to the 28x28 format required by the model.
-
-        Resizes the canvas image to 28x28 pixels using high-quality resampling,
-        converts to numpy array, and applies centering to better match the
-        MNIST dataset format.
-
-        Returns:
-            28x28 numpy array representing the preprocessed digit image
-        """
-        resized = self.image.resize((28, 28), Image.Resampling.LANCZOS)
-        img_array = np.array(resized)
-        img_array = self.center_image(img_array)
-
+    Returns:
+        Centered 28x28 image array with the digit positioned optimally
+    """
+    coords = np.column_stack(np.where(img_array > 30))
+    if len(coords) == 0:
         return img_array
 
-    def center_image(self, img_array: npt.NDArray[np.uint8]) -> npt.NDArray[np.uint8]:
-        """
-        Center the drawn digit within the 28x28 image boundaries.
+    top, left = coords.min(axis=0)
+    bottom, right = coords.max(axis=0) + 1
 
-        Finds the bounding box of the drawn content, extracts the digit,
-        and repositions it in the center of a new 28x28 image to improve
-        recognition accuracy by matching MNIST preprocessing.
+    digit = img_array[top:bottom, left:right]
 
-        Args:
-            img_array: Input 28x28 image array with the drawn digit
+    centered = np.zeros((28, 28), dtype=np.uint8)
 
-        Returns:
-            Centered 28x28 image array with the digit positioned optimally
-        """
-        coords = np.column_stack(np.where(img_array > 30))
-        if len(coords) == 0:
-            return img_array
+    h, w = digit.shape
+    start_y = max(0, (28 - h) // 2)
+    start_x = max(0, (28 - w) // 2)
+    end_y = min(28, start_y + h)
+    end_x = min(28, start_x + w)
 
-        top, left = coords.min(axis=0)
-        bottom, right = coords.max(axis=0) + 1
+    digit_h = end_y - start_y
+    digit_w = end_x - start_x
+    centered[start_y:end_y, start_x:end_x] = digit[:digit_h, :digit_w]
 
-        digit = img_array[top:bottom, left:right]
+    return centered
 
-        centered = np.zeros((28, 28), dtype=np.uint8)
 
-        h, w = digit.shape
-        start_y = max(0, (28 - h) // 2)
-        start_x = max(0, (28 - w) // 2)
-        end_y = min(28, start_y + h)
-        end_x = min(28, start_x + w)
+def run_web_app(port: int) -> None:
+    """Run the Flask web application."""
+    try:
+        from flask import Flask, render_template, request, jsonify
+        import base64
+        import io
+    except ImportError:
+        print("Flask not installed. Install with: pip install flask")
+        sys.exit(1)
 
-        digit_h = end_y - start_y
-        digit_w = end_x - start_x
-        centered[start_y:end_y, start_x:end_x] = digit[:digit_h, :digit_w]
+    app = Flask(__name__)
+    recognizer = DigitRecognizer()
 
-        return centered
+    @app.route('/')
+    def index():
+        return render_template('index.html')
 
-    def predict_digit(self) -> None:
-        """
-        Process the drawn image and display the predicted digit with confidence.
-
-        Preprocesses the current drawing, validates that something was drawn,
-        calls the recognition model for prediction, and updates the UI with
-        the results. Handles errors gracefully with user-friendly messages.
-        """
+    @app.route('/predict', methods=['POST'])
+    def predict():
         try:
-            processed_image = self.preprocess_image()
+            data = request.get_json()
+            image_data = data['image'].split(',')[1]  # Remove data:image/png;base64, prefix
 
-            if np.max(processed_image) < 30:
-                self.result_label.config(text="Please draw a digit first!")
-                self.confidence_label.config(text="")
-                return
+            # Decode and process image
+            image_bytes = base64.b64decode(image_data)
+            image = Image.open(io.BytesIO(image_bytes))
+            image = image.convert('L').resize((28, 28), Image.Resampling.LANCZOS)
+            image_array = np.array(image)
 
-            predicted_digit, confidence = self.recognizer.predict_digit(
-                processed_image)
+            # Center image
+            image_array = center_image(image_array)
 
-            self.result_label.config(text=f"Predicted Digit: {predicted_digit}",
-                                     font=("Arial", 18, "bold"))
-            self.confidence_label.config(text=f"Confidence: {confidence:.2%}")
+            # Check if image has content
+            if np.max(image_array) < 30:
+                return jsonify({'error': 'Please draw a digit first!', 'digit': None, 'confidence': None})
+
+            # Predict
+            predicted_digit, confidence = recognizer.predict_digit(image_array)
+
+            # Convert centered image back to base64 for frontend display
+            from PIL import Image as PILImage
+            centered_pil = PILImage.fromarray(image_array, mode='L')
+            centered_buffer = io.BytesIO()
+            centered_pil.save(centered_buffer, format='PNG')
+            centered_base64 = base64.b64encode(centered_buffer.getvalue()).decode('utf-8')
+
+            return jsonify({
+                'digit': predicted_digit,
+                'confidence': confidence,
+                'error': None,
+                'processed_image': f'data:image/png;base64,{centered_base64}'
+            })
 
         except Exception as e:
-            messagebox.showerror("Error", f"Prediction failed: {str(e)}")
+            return jsonify({'error': f'Prediction failed: {str(e)}', 'digit': None, 'confidence': None})
+
+    print(f"Starting web server on http://localhost:{port}")
+    app.run(debug=False, host='0.0.0.0', port=port)
 
 
 def main() -> None:
     """
-    Initialize and run the handwritten digit recognition application.
+    Initialize and run the handwritten digit recognition web application.
 
-    Creates the main Tkinter window, initializes the DrawingApp,
-    and starts the GUI event loop. Provides console feedback about
-    the application startup process.
+    Parses command line arguments for port configuration and starts the Flask server.
     """
-    print("Starting Handwritten Digit Recognizer...")
+    parser = argparse.ArgumentParser(description='Handwritten Digit Recognizer - Web Interface')
+    parser.add_argument('--port', type=int, default=5000, help='Port for web interface (default: 5000)')
+    args = parser.parse_args()
 
-    root = tk.Tk()
-
-    app = DrawingApp(root)
-
-    print("Application ready! Draw digits in the canvas.")
-    root.mainloop()
+    print("Starting Handwritten Digit Recognition Web App...")
+    run_web_app(args.port)
 
 
 if __name__ == "__main__":
